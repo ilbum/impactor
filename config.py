@@ -1,16 +1,16 @@
 import sys
 import tomllib
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 
 from providers.base import Provider
 
 
 @dataclass
-class AnthropicConfig:
-    api_key: str
-    model: str = "claude-opus-4-7"
+class LLMConfig:
+    model: str
+    api_key: str | None = None
+    api_base: str | None = None
 
 
 @dataclass
@@ -21,7 +21,7 @@ class OutputConfig:
 @dataclass
 class Config:
     providers: dict[str, dict]
-    anthropic: AnthropicConfig
+    llm: LLMConfig | None
     service_map: dict[str, str]
     output: OutputConfig
 
@@ -49,12 +49,16 @@ def load(path: str = "harness.config.toml") -> Config:
         print("Error: [providers.github] is required in your config.", file=sys.stderr)
         sys.exit(1)
 
+    llm_raw = raw.get("llm")
+    llm = LLMConfig(
+        model=llm_raw["model"],
+        api_key=llm_raw.get("api_key"),
+        api_base=llm_raw.get("api_base"),
+    ) if llm_raw else None
+
     return Config(
         providers=raw.get("providers", {}),
-        anthropic=AnthropicConfig(
-            api_key=raw["anthropic"]["api_key"],
-            model=raw["anthropic"].get("model", "claude-opus-4-7"),
-        ),
+        llm=llm,
         service_map=raw.get("service_map", {}),
         output=OutputConfig(path=raw.get("output", {}).get("path", "./reports")),
     )
