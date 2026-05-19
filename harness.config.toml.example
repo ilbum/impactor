@@ -1,23 +1,41 @@
-[github]
+# ── Required ──────────────────────────────────────────────────────────────────
+
+[providers.github]
 token = "ghp_..."
 repos = ["org/api", "org/frontend"]
-
-[datadog]
-api_key    = "..."
-app_key    = "..."
-# List of Datadog dashboard IDs to pull custom metrics from
-dashboards = ["abc123", "def456"]
 
 [anthropic]
 api_key = "..."
 model   = "claude-opus-4-7"
 
-[service_map]
-# Maps Datadog service tags to git path prefixes for attribution.
-# The harness finds commits under these paths and distributes credit
-# proportionally across authors when a metric for that service improves.
-"api-gateway" = "services/api/"
-"frontend"    = "apps/frontend/"
+# ── Optional providers (add any combination) ──────────────────────────────────
+
+# [providers.datadog]
+# api_key    = "..."
+# app_key    = "..."
+# dashboards = ["abc123", "def456"]   # dashboard IDs to pull metrics from
+
+# [providers.linear]
+# api_key  = "..."
+# team_ids = ["TEAM-1"]
+
+# [providers.pagerduty]
+# api_key = "..."
+
+# [providers.sentry]
+# auth_token = "..."
+# org_slug   = "myorg"
+
+# ── Service map (used for metric attribution) ─────────────────────────────────
+# Maps Datadog/Linear service tags to git path prefixes.
+# Credit for an improved metric is distributed proportionally across authors
+# who committed to the matching path during the evaluation period.
+
+# [service_map]
+# "api-gateway" = "services/api/"
+# "frontend"    = "apps/frontend/"
+
+# ── Output ────────────────────────────────────────────────────────────────────
 
 [output]
 path = "./reports"
