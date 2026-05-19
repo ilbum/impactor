@@ -1,0 +1,23 @@
+[github]
+token = "ghp_..."
+repos = ["org/api", "org/frontend"]
+
+[datadog]
+api_key    = "..."
+app_key    = "..."
+# List of Datadog dashboard IDs to pull custom metrics from
+dashboards = ["abc123", "def456"]
+
+[anthropic]
+api_key = "..."
+model   = "claude-opus-4-7"
+
+[service_map]
+# Maps Datadog service tags to git path prefixes for attribution.
+# The harness finds commits under these paths and distributes credit
+# proportionally across authors when a metric for that service improves.
+"api-gateway" = "services/api/"
+"frontend"    = "apps/frontend/"
+
+[output]
+path = "./reports"
