@@ -4,9 +4,29 @@
 token = "ghp_..."
 repos = ["org/api", "org/frontend"]
 
-[anthropic]
-api_key = "..."
-model   = "claude-opus-4-7"
+# ── LLM narrative (optional) ──────────────────────────────────────────────────
+# If omitted, reports are generated without AI summary/highlights.
+# Uses LiteLLM model strings — see https://docs.litellm.ai/docs/providers
+
+# Anthropic Claude:
+# [llm]
+# model   = "anthropic/claude-opus-4-7"
+# api_key = "sk-ant-..."
+
+# OpenAI:
+# [llm]
+# model   = "openai/gpt-4o"
+# api_key = "sk-..."
+
+# Google Gemini:
+# [llm]
+# model   = "gemini/gemini-1.5-pro"
+# api_key = "..."
+
+# Ollama (local, no api_key needed):
+# [llm]
+# model    = "ollama/llama3"
+# api_base = "http://localhost:11434"
 
 # ── Optional providers (add any combination) ──────────────────────────────────
 
