@@ -1,9 +1,6 @@
 from pathlib import Path
 
-from aggregators.code_quality import CodeQualityStats
-from aggregators.multiplier import MultiplierStats
-from aggregators.reliability import ReliabilityStats
-from collectors.datadog import DatadogData
+from signals import CodeActivitySignal, CollaborationSignal, OutcomeMetric, ReliabilitySignal
 
 
 def generate(
@@ -14,21 +11,18 @@ def generate(
     generated_on: str,
     summary: str,
     highlights: list[str],
-    code: CodeQualityStats,
-    multiplier: MultiplierStats,
-    reliability: ReliabilityStats,
+    code: CodeActivitySignal | None,
+    collab: CollaborationSignal | None,
+    reliability: ReliabilitySignal | None,
     attribution: dict[str, float],
-    datadog_data: DatadogData,
+    outcome_metrics: list[OutcomeMetric],
     output_dir: str,
 ) -> Path:
     slug = author_name.lower().replace(" ", "_")
-    filename = f"{slug}_{period_from}_{period_to}.md"
-    path = Path(output_dir) / filename
+    path = Path(output_dir) / f"{slug}_{period_from}_{period_to}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    lines: list[str] = []
-
-    lines += [
+    lines: list[str] = [
         f"# Contribution Report: {author_name}",
         f"**Period:** {period_from} → {period_to}  ",
         f"**Generated:** {generated_on}",
@@ -41,63 +35,78 @@ def generate(
         "",
         "## Impact Highlights",
         "",
+        *[f"- {h}" for h in highlights],
+        "",
+        "---",
+        "",
+        "## Signal Breakdown",
+        "",
     ]
-    for h in highlights:
-        lines.append(f"- {h}")
-    lines += ["", "---", "", "## Signal Breakdown", ""]
 
-    # Outcome metrics
-    lines += ["### Outcome Metrics (Datadog)", ""]
-    attributed_metrics = {m.name for m in datadog_data.metrics if m.is_improvement}
-    if attribution:
+    # Outcome metrics — only if attribution exists
+    if attribution and outcome_metrics:
+        attributed_names = set(attribution.keys())
+        attributed = [m for m in outcome_metrics if m.name in attributed_names and m.is_improvement]
+        if attributed:
+            lines += [
+                "### Outcome Metrics",
+                "",
+                "| Metric | Source | Change | Direction | Attribution |",
+                "|--------|--------|--------|-----------|-------------|",
+            ]
+            for m in attributed:
+                delta_str = f"{m.delta:+.2f}" if m.delta is not None else "n/a"
+                arrow = "↓" if m.direction == "down" else "↑"
+                pct = round(attribution[m.name] * 100)
+                lines.append(f"| `{m.name}` | {m.source} | {delta_str} | {arrow} | {pct}% |")
+            lines.append("")
+    elif "git_ownership" in attribution:
+        pct = round(attribution["git_ownership"] * 100)
         lines += [
-            "| Metric | Change | Direction | Attribution |",
-            "|--------|--------|-----------|-------------|",
+            "### Ownership Share",
+            "",
+            f"_{pct}% of total commits in period (no outcome metrics provider connected)_",
+            "",
         ]
-        for metric_name, credit in attribution.items():
-            metric = next((m for m in datadog_data.metrics if m.name == metric_name), None)
-            if metric is None:
-                continue
-            delta_str = f"{metric.delta:+.2f}" if metric.delta is not None else "n/a"
-            arrow = "↓" if metric.direction == "down" else "↑"
-            pct = round(credit * 100)
-            lines.append(f"| `{metric_name}` | {delta_str} | {arrow} | {pct}% attributed share |")
-    else:
-        lines.append("_No improved Datadog metrics attributed to this contributor in this period._")
-    lines.append("")
 
-    # Code authorship
-    lines += [
-        "### Code Authorship",
-        "",
-        f"- **Commits:** {code.commit_count} | **PRs merged:** {code.prs_merged}",
-        f"- **Features:** {code.feature_prs} | **Bug fixes:** {code.bug_fix_prs}",
-        f"- **PRs touching tests:** {code.test_prs}",
-        "",
-    ]
+    # Code authorship — only if present
+    if code:
+        lines += [
+            "### Code Authorship",
+            "",
+            f"- **Commits:** {code.commit_count} | **PRs merged:** {code.prs_merged}",
+            f"- **Features:** {code.feature_prs} | **Bug fixes:** {code.bug_fix_prs}",
+            f"- **PRs touching tests:** {code.test_prs}",
+            "",
+        ]
 
-    # Multiplier effect
-    lines += [
-        "### Multiplier Effect",
-        "",
-        f"- **PRs reviewed:** {multiplier.prs_reviewed}",
-        f"- **Approvals given (unblocking):** {multiplier.approvals_given}",
-        f"- **Documentation PRs:** {multiplier.documentation_prs}",
-        "",
-    ]
+    # Collaboration — only if present
+    if collab:
+        lines += [
+            "### Multiplier Effect",
+            "",
+            f"- **PRs reviewed:** {collab.prs_reviewed}",
+            f"- **Approvals given (unblocking):** {collab.approvals_given}",
+            f"- **Documentation PRs:** {collab.documentation_prs}",
+            "",
+        ]
 
-    # Reliability context
-    lines += ["### Reliability Context", ""]
-    if reliability.reverted_commits:
-        lines.append(f"- **Reverted commits:** {len(reliability.reverted_commits)}")
-        for r in reliability.reverted_commits:
-            date_str = r.timestamp.strftime("%Y-%m-%d")
-            lines.append(f"  - `{r.sha[:7]}` — {date_str}: _{r.message}_")
-    else:
-        lines.append("- **Reverted commits:** 0")
-    lines += ["", "---", "", "## Manager Notes", ""]
-    lines.append("> *(Fill this in before sharing with the contributor)*")
-    lines.append("")
+    # Reliability — only if reverts or incidents exist
+    if reliability and (reliability.reverted_commits or reliability.incidents):
+        lines += ["### Reliability Context", ""]
+        if reliability.reverted_commits:
+            lines.append(f"- **Reverted commits:** {len(reliability.reverted_commits)}")
+            for r in reliability.reverted_commits:
+                date_str = r.timestamp.strftime("%Y-%m-%d")
+                lines.append(f"  - `{r.sha[:7]}` — {date_str}: _{r.message}_")
+        if reliability.incidents:
+            lines.append(f"- **Incidents attributed:** {len(reliability.incidents)}")
+            for i in reliability.incidents:
+                date_str = i.timestamp.strftime("%Y-%m-%d")
+                lines.append(f"  - [{i.id}] {date_str}: _{i.title}_ (via {i.source})")
+        lines.append("")
+
+    lines += ["---", "", "## Manager Notes", "", "> *(Fill this in before sharing with the contributor)*", ""]
 
     path.write_text("\n".join(lines))
     return path

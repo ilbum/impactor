@@ -2,11 +2,7 @@ import json
 
 import anthropic
 
-from aggregators.code_quality import CodeQualityStats
-from aggregators.multiplier import MultiplierStats
-from aggregators.reliability import ReliabilityStats
-from attribution import AttributionMap
-
+from signals import CodeActivitySignal, CollaborationSignal, ReliabilitySignal
 
 SYSTEM_PROMPT = """\
 You are a thoughtful engineering manager writing a concise performance snapshot for a contributor.
@@ -20,45 +16,48 @@ def generate(
     author_name: str,
     period_from: str,
     period_to: str,
-    code: CodeQualityStats,
-    multiplier: MultiplierStats,
-    reliability: ReliabilityStats,
+    code: CodeActivitySignal | None,
+    collab: CollaborationSignal | None,
+    reliability: ReliabilitySignal | None,
     attribution: dict[str, float],
     api_key: str,
     model: str,
 ) -> tuple[str, list[str]]:
-    """Returns (summary_paragraph, highlights_list)."""
+    signals: dict = {"contributor": author_name, "period": f"{period_from} to {period_to}"}
 
-    signals = {
-        "contributor": author_name,
-        "period": f"{period_from} to {period_to}",
-        "outcome_metrics_attribution": {
+    if attribution:
+        signals["attribution"] = {
             metric: f"{round(credit * 100)}% credited share"
             for metric, credit in attribution.items()
-        },
-        "code_authorship": {
+        }
+
+    if code:
+        signals["code_authorship"] = {
             "commits": code.commit_count,
             "prs_merged": code.prs_merged,
             "bug_fix_prs": code.bug_fix_prs,
             "feature_prs": code.feature_prs,
             "prs_touching_tests": code.test_prs,
-        },
-        "multiplier_effect": {
-            "prs_reviewed": multiplier.prs_reviewed,
-            "approvals_given": multiplier.approvals_given,
-            "documentation_prs": multiplier.documentation_prs,
-        },
-        "reliability_context": {
+        }
+
+    if collab:
+        signals["multiplier_effect"] = {
+            "prs_reviewed": collab.prs_reviewed,
+            "approvals_given": collab.approvals_given,
+            "documentation_prs": collab.documentation_prs,
+        }
+
+    if reliability:
+        signals["reliability_context"] = {
             "reverted_commits": len(reliability.reverted_commits),
-        },
-    }
+            "incidents": len(reliability.incidents),
+        }
 
     client = anthropic.Anthropic(api_key=api_key)
 
     response = client.messages.create(
         model=model,
         max_tokens=512,
-        system=anthropic.NOT_GIVEN,
         messages=[
             {
                 "role": "user",
