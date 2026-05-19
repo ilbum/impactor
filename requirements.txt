@@ -1,6 +1,6 @@
 click>=8.1
 PyGithub>=2.1
 datadog-api-client>=2.20
-anthropic>=0.30
+litellm>=1.40
 tomli>=2.0
 rich>=13.0

@@ -1,6 +1,6 @@
 import json
 
-import anthropic
+import litellm
 
 from signals import CodeActivitySignal, CollaborationSignal, ReliabilitySignal
 
@@ -20,8 +20,9 @@ def generate(
     collab: CollaborationSignal | None,
     reliability: ReliabilitySignal | None,
     attribution: dict[str, float],
-    api_key: str,
     model: str,
+    api_key: str | None,
+    api_base: str | None,
 ) -> tuple[str, list[str]]:
     signals: dict = {"contributor": author_name, "period": f"{period_from} to {period_to}"}
 
@@ -30,7 +31,6 @@ def generate(
             metric: f"{round(credit * 100)}% credited share"
             for metric, credit in attribution.items()
         }
-
     if code:
         signals["code_authorship"] = {
             "commits": code.commit_count,
@@ -39,38 +39,40 @@ def generate(
             "feature_prs": code.feature_prs,
             "prs_touching_tests": code.test_prs,
         }
-
     if collab:
         signals["multiplier_effect"] = {
             "prs_reviewed": collab.prs_reviewed,
             "approvals_given": collab.approvals_given,
             "documentation_prs": collab.documentation_prs,
         }
-
     if reliability:
         signals["reliability_context"] = {
             "reverted_commits": len(reliability.reverted_commits),
             "incidents": len(reliability.incidents),
         }
 
-    client = anthropic.Anthropic(api_key=api_key)
-
-    response = client.messages.create(
-        model=model,
-        max_tokens=512,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"{SYSTEM_PROMPT}\n\n"
-                    f"Signal data:\n{json.dumps(signals, indent=2)}\n\n"
-                    "Respond with JSON only, no markdown fences:\n"
-                    '{"summary": "<2-3 sentence paragraph>", "highlights": ["<bullet 1>", "<bullet 2>", "<bullet 3>"]}'
-                ),
-            }
-        ],
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        f"Signal data:\n{json.dumps(signals, indent=2)}\n\n"
+        "Respond with JSON only, no markdown fences:\n"
+        '{"summary": "<2-3 sentence paragraph>", "highlights": ["<bullet 1>", "<bullet 2>", "<bullet 3>"]}'
     )
 
-    raw = response.content[0].text.strip()
-    parsed = json.loads(raw)
+    response = litellm.completion(
+        model=model,
+        max_tokens=512,
+        api_key=api_key,
+        api_base=api_base,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = response.choices[0].message.content.strip()
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"LLM ({model}) returned malformed JSON: {e}\n\nRaw response:\n{raw}"
+        ) from e
+
     return parsed["summary"], parsed["highlights"]
