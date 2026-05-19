@@ -1,0 +1,9 @@
+services:
+  claude:
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - ~/.claude:/home/node/.claude
+      - ~/.claude.json:/home/node/.claude.json
+      - .:/workspace
