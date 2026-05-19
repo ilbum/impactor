@@ -4,15 +4,11 @@ import click
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-import aggregators.code_quality as code_quality_agg
-import aggregators.multiplier as multiplier_agg
-import aggregators.reliability as reliability_agg
 import attribution as attribution_engine
-import collectors.datadog as dd_collector
-import collectors.github as gh_collector
 import config as config_loader
 import narrative
 import report
+from signals import CodeActivitySignal, CollaborationSignal, OutcomeMetric, ProviderOutput, ReliabilitySignal
 
 console = Console()
 
@@ -31,50 +27,49 @@ def cli():
 def run(from_date: str, to_date: str, contributor: str | None, config_path: str, output: str | None):
     """Generate contribution impact reports for a date range."""
     cfg = config_loader.load(config_path)
+    providers = config_loader.load_providers(cfg)
     output_dir = output or cfg.output.path
 
     since = _parse_date(from_date)
     until = _parse_date(to_date)
     generated_on = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
+    outputs: list[ProviderOutput] = []
     with Progress(SpinnerColumn(), TextColumn("{task.description}"), console=console) as progress:
-        task = progress.add_task("Collecting GitHub data...", total=None)
-        github_data = gh_collector.collect(cfg.github.token, cfg.github.repos, since, until)
-        progress.update(task, description=f"GitHub: {len(github_data.commits)} commits, {len(github_data.pull_requests)} PRs")
-
-        task = progress.add_task("Collecting Datadog metrics...", total=None)
-        datadog_data = dd_collector.collect(cfg.datadog.api_key, cfg.datadog.app_key, cfg.datadog.dashboards, since, until)
-        progress.update(task, description=f"Datadog: {len(datadog_data.metrics)} metrics")
+        for provider in providers:
+            task = progress.add_task(f"Collecting from {provider.name}...", total=None)
+            result = provider.collect(since, until)
+            outputs.append(result)
+            summary = _summarize(result)
+            progress.update(task, description=f"{provider.name}: {summary}")
 
         task = progress.add_task("Building attribution map...", total=None)
-        attr_map = attribution_engine.build(github_data, datadog_data, cfg.service_map)
+        attr_map = attribution_engine.build(outputs, cfg.service_map)
         progress.update(task, description="Attribution complete")
 
-    # Determine contributor set
-    all_authors: dict[str, str] = {}  # email -> name
-    for c in github_data.commits:
-        if c.author_email and c.author_email not in all_authors:
-            all_authors[c.author_email] = c.author_name
-    for pr in github_data.pull_requests:
-        if pr.author_email and pr.author_email not in all_authors:
-            all_authors[pr.author_email] = pr.author_name
+    # Collect all authors seen across code_activity signals
+    authors: dict[str, str] = {}  # email -> name
+    for o in outputs:
+        for s in o.code_activity:
+            if s.author_email and s.author_email not in authors:
+                authors[s.author_email] = s.author_name
 
     if contributor:
-        if contributor not in all_authors:
-            console.print(f"[yellow]Warning:[/yellow] contributor {contributor!r} not found in collected data.")
+        if contributor not in authors:
+            console.print(f"[yellow]Warning:[/yellow] {contributor!r} not found in collected data.")
             return
-        authors = {contributor: all_authors[contributor]}
-    else:
-        authors = all_authors
+        authors = {contributor: authors[contributor]}
+
+    all_outcome_metrics: list[OutcomeMetric] = [m for o in outputs for m in o.outcome_metrics]
 
     console.print(f"\nGenerating reports for [bold]{len(authors)}[/bold] contributor(s)...\n")
 
     for email, name in authors.items():
         console.print(f"  [cyan]{name}[/cyan] ({email})")
 
-        code = code_quality_agg.aggregate(github_data, email)
-        mult = multiplier_agg.aggregate(github_data, email)
-        rel = reliability_agg.aggregate(github_data, email)
+        code = _find_code(outputs, email)
+        collab = _find_collab(outputs, email)
+        rel = _find_reliability(outputs, email)
         author_attribution = attr_map.get(email, {})
 
         summary, highlights = narrative.generate(
@@ -82,7 +77,7 @@ def run(from_date: str, to_date: str, contributor: str | None, config_path: str,
             period_from=from_date,
             period_to=to_date,
             code=code,
-            multiplier=mult,
+            collab=collab,
             reliability=rel,
             attribution=author_attribution,
             api_key=cfg.anthropic.api_key,
@@ -98,10 +93,10 @@ def run(from_date: str, to_date: str, contributor: str | None, config_path: str,
             summary=summary,
             highlights=highlights,
             code=code,
-            multiplier=mult,
+            collab=collab,
             reliability=rel,
             attribution=author_attribution,
-            datadog_data=datadog_data,
+            outcome_metrics=all_outcome_metrics,
             output_dir=output_dir,
         )
 
@@ -112,6 +107,30 @@ def run(from_date: str, to_date: str, contributor: str | None, config_path: str,
 
 def _parse_date(date_str: str) -> datetime:
     return datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+
+def _summarize(output: ProviderOutput) -> str:
+    parts = []
+    if output.outcome_metrics:
+        parts.append(f"{len(output.outcome_metrics)} metrics")
+    if output.code_activity:
+        total = sum(s.commit_count for s in output.code_activity)
+        parts.append(f"{total} commits")
+    if output.collaboration:
+        parts.append(f"{len(output.collaboration)} reviewers")
+    return ", ".join(parts) if parts else "no data"
+
+
+def _find_code(outputs: list[ProviderOutput], email: str) -> CodeActivitySignal | None:
+    return next((s for o in outputs for s in o.code_activity if s.author_email == email), None)
+
+
+def _find_collab(outputs: list[ProviderOutput], email: str) -> CollaborationSignal | None:
+    return next((s for o in outputs for s in o.collaboration if s.author_email == email), None)
+
+
+def _find_reliability(outputs: list[ProviderOutput], email: str) -> ReliabilitySignal | None:
+    return next((s for o in outputs for s in o.reliability if s.author_email == email), None)
 
 
 if __name__ == "__main__":
