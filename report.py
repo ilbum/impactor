@@ -9,8 +9,8 @@ def generate(
     period_from: str,
     period_to: str,
     generated_on: str,
-    summary: str,
-    highlights: list[str],
+    summary: str | None,
+    highlights: list[str] | None,
     code: CodeActivitySignal | None,
     collab: CollaborationSignal | None,
     reliability: ReliabilitySignal | None,
@@ -29,19 +29,14 @@ def generate(
         "",
         "---",
         "",
-        "## Summary",
-        "",
-        summary,
-        "",
-        "## Impact Highlights",
-        "",
-        *[f"- {h}" for h in highlights],
-        "",
-        "---",
-        "",
-        "## Signal Breakdown",
-        "",
     ]
+
+    if summary:
+        lines += ["## Summary", "", summary, ""]
+    if highlights:
+        lines += ["## Impact Highlights", "", *[f"- {h}" for h in highlights], ""]
+
+    lines += ["---", "", "## Signal Breakdown", ""]
 
     # Outcome metrics — only if attribution exists
     if attribution and outcome_metrics:

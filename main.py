@@ -72,17 +72,21 @@ def run(from_date: str, to_date: str, contributor: str | None, config_path: str,
         rel = _find_reliability(outputs, email)
         author_attribution = attr_map.get(email, {})
 
-        summary, highlights = narrative.generate(
-            author_name=name,
-            period_from=from_date,
-            period_to=to_date,
-            code=code,
-            collab=collab,
-            reliability=rel,
-            attribution=author_attribution,
-            api_key=cfg.anthropic.api_key,
-            model=cfg.anthropic.model,
-        )
+        if cfg.llm:
+            summary, highlights = narrative.generate(
+                author_name=name,
+                period_from=from_date,
+                period_to=to_date,
+                code=code,
+                collab=collab,
+                reliability=rel,
+                attribution=author_attribution,
+                model=cfg.llm.model,
+                api_key=cfg.llm.api_key,
+                api_base=cfg.llm.api_base,
+            )
+        else:
+            summary, highlights = None, None
 
         out_path = report.generate(
             author_name=name,
