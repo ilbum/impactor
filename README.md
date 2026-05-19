@@ -50,6 +50,29 @@ harness/
 
 ---
 
+## Quick start (GitHub only)
+
+The only required provider is GitHub. No Datadog credentials needed.
+
+```toml
+# harness.config.toml
+[providers.github]
+token = "ghp_..."
+repos = ["org/api", "org/frontend"]
+
+[anthropic]
+api_key = "..."
+```
+
+```bash
+pip install -r requirements.txt
+python -m harness run --from 2024-01-01 --to 2024-03-31
+```
+
+Reports will include code authorship, multiplier effect, and git ownership share. Outcome metric sections appear automatically once a metrics provider is connected.
+
+---
+
 ## Usage
 
 ```bash
@@ -57,34 +80,49 @@ python -m harness run \
   --from 2024-01-01 \
   --to   2024-03-31 \
   [--contributor alice@example.com] \
-  [--all] \
   [--output ./reports]
 ```
 
 ---
 
+## Providers
+
+The harness is provider-based. Each data source is a separate provider declared in config. Add or remove providers by adding or removing their `[providers.<name>]` section — no code changes needed.
+
+| Provider | Status | Signal categories |
+|----------|--------|------------------|
+| `github` | **Required** | code_activity, collaboration, reliability |
+| `datadog` | Optional | outcome_metrics |
+| `linear` | Stub (coming soon) | outcome_metrics |
+| `pagerduty` | Stub (coming soon) | reliability |
+| `sentry` | Stub (coming soon) | reliability, outcome_metrics |
+
+---
+
 ## Configuration
 
-Copy `harness.config.toml.example` to `harness.config.toml` and fill in your keys:
+Copy `harness.config.toml.example` to `harness.config.toml`:
 
 ```toml
-[github]
-token  = "ghp_..."
-repos  = ["org/api", "org/frontend"]
+# Required
+[providers.github]
+token = "ghp_..."
+repos = ["org/api", "org/frontend"]
 
-[datadog]
-api_key    = "..."
-app_key    = "..."
-dashboards = ["abc123", "def456"]   # dashboard IDs to pull metrics from
+# Optional — add any combination
+# [providers.datadog]
+# api_key    = "..."
+# app_key    = "..."
+# dashboards = ["abc123", "def456"]
 
 [anthropic]
 api_key = "..."
 model   = "claude-opus-4-7"
 
-[service_map]
-# maps Datadog service tags → git path prefixes (used for attribution)
-"api-gateway" = "services/api/"
-"frontend"    = "apps/frontend/"
+# Maps provider service tags to git path prefixes for metric attribution
+# [service_map]
+# "api-gateway" = "services/api/"
+# "frontend"    = "apps/frontend/"
 
 [output]
 path = "./reports"
