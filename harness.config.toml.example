@@ -1,8 +1,15 @@
-# ── Required ──────────────────────────────────────────────────────────────────
+# ── Code provider (one required) ──────────────────────────────────────────────
+# Option A: GitHub — enables collaboration signals (reviews, approvals)
 
 [providers.github]
 token = "ghp_..."
 repos = ["org/api", "org/frontend"]
+
+# Option B: local git — no token needed; code activity and reliability only.
+# Reviews and approvals are unavailable without the GitHub provider.
+#
+# [providers.git]
+# paths = ["/path/to/repo1", "/path/to/repo2"]  # defaults to ["."]
 
 # ── LLM narrative (optional) ──────────────────────────────────────────────────
 # If omitted, reports are generated without AI summary/highlights.

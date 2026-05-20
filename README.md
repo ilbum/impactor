@@ -50,18 +50,25 @@ harness/
 
 ---
 
-## Quick start (GitHub only)
+## Quick start
 
-The only required provider is GitHub. No Datadog credentials needed.
+One of `[providers.github]` or `[providers.git]` is required. No Datadog credentials needed.
+
+**With GitHub** (full signal coverage including reviews and approvals):
 
 ```toml
 # harness.config.toml
 [providers.github]
 token = "ghp_..."
 repos = ["org/api", "org/frontend"]
+```
 
-[anthropic]
-api_key = "..."
+**Without a GitHub token** (local git, no PR review data):
+
+```toml
+# harness.config.toml
+[providers.git]
+paths = ["."]   # one or more local repo paths
 ```
 
 ```bash
@@ -69,7 +76,7 @@ pip install -r requirements.txt
 python -m harness run --from 2024-01-01 --to 2024-03-31
 ```
 
-Reports will include code authorship, multiplier effect, and git ownership share. Outcome metric sections appear automatically once a metrics provider is connected.
+Reports include code authorship and git ownership share. With the `github` provider, the Multiplier Effect section (reviews, approvals) is also populated. Outcome metric sections appear once a metrics provider is connected.
 
 ---
 
@@ -91,7 +98,8 @@ The harness is provider-based. Each data source is a separate provider declared 
 
 | Provider | Status | Signal categories |
 |----------|--------|------------------|
-| `github` | **Required** | code_activity, collaboration, reliability |
+| `github` | Required (or `git`) | code_activity, collaboration, reliability |
+| `git` | Required (or `github`) | code_activity, reliability |
 | `datadog` | Optional | outcome_metrics |
 | `linear` | Stub (coming soon) | outcome_metrics |
 | `pagerduty` | Stub (coming soon) | reliability |
@@ -104,10 +112,16 @@ The harness is provider-based. Each data source is a separate provider declared 
 Copy `harness.config.toml.example` to `harness.config.toml`:
 
 ```toml
-# Required
+# Required — use github OR git (not both)
+
+# Option A: GitHub (enables reviews + approvals in reports)
 [providers.github]
 token = "ghp_..."
 repos = ["org/api", "org/frontend"]
+
+# Option B: local git repos, no token needed
+# [providers.git]
+# paths = ["/path/to/repo1", "/path/to/repo2"]
 
 # Optional — add any combination
 # [providers.datadog]
@@ -115,9 +129,9 @@ repos = ["org/api", "org/frontend"]
 # app_key    = "..."
 # dashboards = ["abc123", "def456"]
 
-[anthropic]
-api_key = "..."
-model   = "claude-opus-4-7"
+[llm]
+model   = "anthropic/claude-opus-4-7"
+api_key = "sk-ant-..."
 
 # Maps provider service tags to git path prefixes for metric attribution
 # [service_map]
