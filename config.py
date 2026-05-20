@@ -28,11 +28,14 @@ class Config:
 
 _PROVIDER_REGISTRY: dict[str, str] = {
     "github":    "providers.github.GitHubProvider",
+    "git":       "providers.git.GitProvider",
     "datadog":   "providers.datadog.DatadogProvider",
     "linear":    "providers.linear.LinearProvider",
     "pagerduty": "providers.pagerduty.PagerDutyProvider",
     "sentry":    "providers.sentry.SentryProvider",
 }
+
+_CODE_PROVIDERS = {"github", "git"}
 
 
 def load(path: str = "harness.config.toml") -> Config:
@@ -45,8 +48,8 @@ def load(path: str = "harness.config.toml") -> Config:
     with open(config_path, "rb") as f:
         raw = tomllib.load(f)
 
-    if "providers" not in raw or "github" not in raw["providers"]:
-        print("Error: [providers.github] is required in your config.", file=sys.stderr)
+    if "providers" not in raw or not (_CODE_PROVIDERS & set(raw["providers"])):
+        print("Error: config must include [providers.github] or [providers.git].", file=sys.stderr)
         sys.exit(1)
 
     llm_raw = raw.get("llm")
@@ -91,6 +94,9 @@ def load_providers(cfg: Config) -> list[Provider]:
 def _instantiate(name: str, cls, cfg: dict):
     if name == "github":
         return cls(token=cfg["token"], repos=cfg["repos"])
+    if name == "git":
+        paths = cfg.get("paths") or [cfg.get("path", ".")]
+        return cls(paths=paths)
     if name == "datadog":
         return cls(api_key=cfg["api_key"], app_key=cfg["app_key"], dashboards=cfg.get("dashboards", []))
     if name == "linear":
